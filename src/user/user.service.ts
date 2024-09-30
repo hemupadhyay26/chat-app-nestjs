@@ -13,15 +13,14 @@ export class UserService {
   private twilioClient: Twilio;
 
   constructor(
-    private readonly configService: ConfigService,
     @InjectRepository(Profile)
     private profileRepository: Repository<Profile>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private jwtService: JwtService // Inject JWT service
   ) {
-    const accountSid = configService.get('TWILIO_ACCOUNT_SID');
-    const authToken = configService.get('TWILIO_AUTH_TOKEN');
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
     this.twilioClient = new Twilio(accountSid, authToken);
   }
 
@@ -50,38 +49,42 @@ export class UserService {
   }
 
   // Send OTP
-  async sendOtp(phoneNumber: string): Promise<{ msg: string }> {
-    const serviceSid = this.configService.get('TWILIO_VERIFICATION_SERVICE_SID');
-    const otpExpiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours from now
+  async sendOtp(phoneNumber: string): Promise<{ msg: string, waitTime?: number }> {
+    const serviceSid = process.env.TWILIO_VERIFICATION_SERVICE_SID;
+    const otpExpiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000); // OTP expires in 2 hours
 
-    // Check if user exists or create a new entry
     let user = await this.userRepository.findOne({ where: { phoneNumber } });
-    if (!user) {
-      user = this.userRepository.create({ phoneNumber, otpExpiresAt });
-    } else {
-      if (user.isVerified) {
-        return { msg: 'User is already verified' };
+    const currentTime = new Date();
+
+    if (user) {
+      const lastOtpSentAt = user.lastOtpSentAt || new Date(0);
+      const timeDifference = currentTime.getTime() - lastOtpSentAt.getTime();
+
+      if (timeDifference < 20 * 1000) { // 20 seconds
+        const waitTime = 20 - Math.floor(timeDifference / 1000);
+        return { msg: `Please wait ${waitTime} seconds before requesting another OTP.`, waitTime };
       }
-      user.otpExpiresAt = otpExpiresAt; // Update expiration if user already exists
+
+      user.otpExpiresAt = otpExpiresAt;
+    } else {
+      user = this.userRepository.create({ phoneNumber, otpExpiresAt });
     }
 
-    // Send OTP via Twilio (Add your Twilio integration here)
+    user.lastOtpSentAt = currentTime;
+    await this.userRepository.save(user);
+
     let msg = '';
     await this.twilioClient.verify.v2
       .services(serviceSid)
       .verifications.create({ to: phoneNumber, channel: 'sms' })
-      .then((verification) => (msg = verification.status));
+      .then((verification) => (msg = verification.status)).catch((error) => console.log(error));
 
-    // Update user status to "pending" after sending the OTP
-    user.isVerified = false; // Mark user as not verified yet
-    await this.userRepository.save(user);
-
-    return { msg: 'OTP sent successfully' }; // Return response
+    return { msg: 'OTP sent successfully' };
   }
 
   // Verify OTP
   async verifyOtp(phoneNumber: string, code: string): Promise<{ msg: string; token?: string }> {
-    const serviceSid = this.configService.get('TWILIO_VERIFICATION_SERVICE_SID');
+    const serviceSid = process.env.TWILIO_VERIFICATION_SERVICE_SID
     let msg = '';
 
     // Verify the OTP using Twilio (Add your Twilio verification here)

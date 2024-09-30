@@ -18,10 +18,22 @@ export class Profile {
   @Column({ nullable: true })
   gender: string;
 
-  @Column({ type: 'date', nullable: true }) // Use the correct date type for DOB
+  @Column({ type: 'date', nullable: true }) // Date of birth field
   dob?: string;
-  
-  @OneToOne(() => User, (user) => user.profile) // Establishing a one-to-one relationship
+
+  @Column({ nullable: true }) // New column for user announcement
+  announcement: string;
+
+  @Column({ default: 'light' }) // New column for color preference (light by default)
+  colorPreference: 'dark' | 'light'; 
+
+  @Column({ nullable: true }) // New column for location
+  location: string;
+
+  @Column({ nullable: true }) // New column for nickname
+  nickname: string;
+
+  @OneToOne(() => User, (user) => user.profile)
   @JoinColumn() // Join with the User entity
   user: User;
 }

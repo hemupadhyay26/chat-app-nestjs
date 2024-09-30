@@ -10,7 +10,13 @@ export class User {
   phoneNumber: string;
 
   @Column({ default: false })
+  isOnline: boolean;
+
+  @Column({ default: false })
   isVerified: boolean;
+
+  @Column({ nullable: true })
+  lastOtpSentAt: Date
 
   @Column({ type: 'timestamp', nullable: true })
   otpExpiresAt: Date;
